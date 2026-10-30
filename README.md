@@ -4,6 +4,8 @@ Keel owns the hourly grid, forecast requests, baselines, walk-forward scoring an
 
 The original Timestral checkout at `~/Projects/timestral` is unchanged. The deployed worker lives at `~/Projects/energy-timestral`. This is an inference port of the released weights, not a separately trained model.
 
+![Pipeline architecture](docs/pipeline-diagram.png)
+
 ## Run the installed worker
 
 On the Intel machine, `energy-timestral.service` is a transient **user** service, started with `systemd-run`. It is not enabled at boot. Inspect it with:
