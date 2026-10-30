@@ -1,0 +1,9 @@
+data = "data/svk_2026/load.tsv"
+output = "output/svk-load-history-smoke-network"
+from = "2026-03-08"
+to = "2026-03-09"
+target = "load"
+features = "history"
+context = 672
+phase = "development"
+synthetic = false

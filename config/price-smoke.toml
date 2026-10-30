@@ -1,0 +1,9 @@
+data = "data/synthetic-2026.tsv"
+output = "output/price-dst-smoke"
+from = "2026-10-25"
+to = "2026-10-26"
+features = "calendar"
+target = "price"
+context = 672
+phase = "development"
+synthetic = true

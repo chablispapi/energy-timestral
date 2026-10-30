@@ -1,0 +1,16 @@
+import pipeline as p
+import std.array
+
+main =
+ p.require (p.abs (-500) == 500);
+ p.require (p.pinball 2000 (array.make 21 1000) 0 0 == 105000000);
+ p.require (p.quantile 5000 (Cons(1, box Cons(3, box Cons(9, box Nil)))) == 3);
+ let s = p.Series(0, array.fromList (Cons(array.fromList (Cons(Some(5), box Nil)), box Cons(array.fromList (Cons(None, box Nil)), box Nil)))) in
+ p.require (case p.sample s 0 0 of { Some(x) -> x == 5 | _ -> false });
+ p.require (case p.sample s 3600 0 of { None -> true | _ -> false });
+ p.require (case p.sample s (-3600) 0 of { None -> true | _ -> false });
+ p.require (p.received (p.frame "test"));
+ let a = p.accumulate (Some(1500)) (array.make 21 1000) (p.Acc(0, 0, 0, 0, 0, 0, 0, 0)) in
+ p.require (case a of { p.Acc(n, m, ae, pb, c80, c90, w80, w90) -> n == 1 && m == 0 && ae == 500 && pb == 52500000 && c80 == 0 && c90 == 0 && w80 == 0 && w90 == 0 });
+ println "Keel metrics, missing values and framing PASS";
+ 0

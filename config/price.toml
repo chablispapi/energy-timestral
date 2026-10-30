@@ -1,0 +1,14 @@
+data = "data/price.tsv"
+output = "output/price-history-development"
+from = "2024-01-01"
+to = "2026-07-01"
+target = "price"
+features = "history"
+context = 672
+worker = "127.0.0.1:7419"
+phase = "development"
+# For features = "load" or "residual":
+# load_data = "data/load.tsv"
+# wind_data = "data/wind-total.tsv"
+# solar_data = "data/solar.tsv"
+

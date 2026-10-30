@@ -1,0 +1,12 @@
+data = "data/synthetic-2026.tsv"
+output = "output/derived-smoke"
+from = "2026-06-05"
+to = "2026-06-06"
+features = "residual"
+target = "price"
+context = 672
+phase = "development"
+synthetic = true
+load_data = "data/synthetic-2026.tsv"
+wind_data = "data/synthetic-2026.tsv"
+solar_data = "data/synthetic-2026.tsv"

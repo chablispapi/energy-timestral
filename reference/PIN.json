@@ -1,0 +1,10 @@
+{
+  "repository": "mistralai/Timestral-5M",
+  "revision": "bdd20cfc15a3fea0e4cb5ccef37f8d3ca7aa335f",
+  "upstream_commit": "a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff",
+  "files": {
+    "model.safetensors": "7ace108c4987e7f2a99a75a445240019d1d31c2117139d1bd05ffdfd25aca738",
+    "config.json": "b5f27f61513f8fd1a3aa996f3720d3679cb40bce5bcb08eb3dc320ce726e7c2f"
+  },
+  "fingerprint": "5c49704c490ce2a42d78dd87e4512754c24bd7972add8847fe30beabd4b29995"
+}

@@ -1,0 +1,2 @@
+# Legacy Svk .xls decoding only. No Excel authoring dependency.
+xlrd==2.0.2

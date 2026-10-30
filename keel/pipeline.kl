@@ -1,0 +1,204 @@
+import std.array
+import std.string
+import std.file
+import std.loop
+
+def require : Bool ->{Panic} Unit = \ok. if ok then () else (let x = array.get (array.make 0 0i64) 0 in ())
+
+def number : List u8 ->{Diverge, Panic} i64 = \s. case string.parseInt s of { Some(n) -> n | None -> require false; 0 }
+
+def abs : i64 ->{Panic} i64 = \n. if n < 0 then 0 - n else n
+
+def cells : List u8 ->{Diverge} Array (List u8) = \s. array.fromList (string.split '\t' s)
+
+def value : List u8 ->{Diverge, Panic} Option i64 = \s. if string.equal s "NA" then None else Some(number s)
+
+def textValue : Option i64 ->{Diverge, Panic} List u8 = \v. case v of { None -> "NA" | Some(n) -> string.fromInt n }
+
+data Series = Series(i64, Array (Array (Option i64)))
+
+def rowValues : Array (List u8) -> i64 -> Array (Option i64) ->{Diverge, Panic} Array (Option i64) =
+ \xs i acc. if i == array.length xs then acc else rowValues xs (i + 1) (array.push acc (value (array.get xs i)))
+
+def parseRows : List (List u8) -> i64 -> i64 -> Array (Array (Option i64)) ->{Diverge, Panic} Series =
+ \lines start expected acc. case lines of { Nil -> Series(start, acc) | Cons(line, rest) ->
+ let cs = cells line in let ts = number (array.get cs 0) in
+ let first = if array.length acc == 0 then ts else start in
+ require (array.length cs > 1 && (array.length acc == 0 || ts == expected) && ts % 3600 == 0);
+ parseRows (unbox rest) first (ts + 3600) (array.push acc (rowValues cs 1 array.empty)) }
+
+def loadSeries : List u8 ->{Files, Diverge, Panic} Series = \path.
+ case file.read path of { None -> require false; Series(0, array.empty) | Some(s) -> parseRows (string.lines s) 0 0 array.empty }
+
+def sample : Series -> i64 -> i64 ->{Panic} Option i64 = \s ts col. case s of { Series(start, rows) ->
+ let i = (ts - start) / 3600 in
+ if ts < start || i < 0 || array.length rows <= i then None else
+ let r = array.get rows i in if col < array.length r then array.get r col else None }
+
+def valuesText : Series -> i64 -> i64 -> i64 -> List u8 ->{Diverge, Panic} List u8 =
+ \s ts count col acc. if count == 0 then acc else
+ valuesText s (ts + 3600) (count - 1) col (append acc (append "\t" (textValue (sample s ts col))))
+
+def insert : i64 -> List i64 ->{Diverge} List i64 = \x xs. case xs of { Nil -> Cons(x, box Nil) | Cons(y, rest) -> if x < y then Cons(x, box xs) else Cons(y, box (insert x (unbox rest))) }
+
+def residuals : Series -> i64 -> i64 -> i64 -> List i64 ->{Diverge, Panic} List i64 =
+ \s ts left lag acc. if left == 0 then acc else
+ let next = case (sample s ts 0, sample s (ts - lag * 3600) 0) of { (Some(y), Some(p)) -> insert (y - p) acc | _ -> acc } in
+ residuals s (ts - 86400) (left - 1) lag next
+
+def nth : i64 -> List i64 ->{Diverge, Panic} i64 = \i xs. case xs of { Nil -> 0 | Cons(x, rest) -> if i == 0 then x else nth (i - 1) (unbox rest) }
+
+def quantile : i64 -> List i64 ->{Diverge, Panic} i64 = \q xs. let n = prelude.length xs in if n == 0 then 0 else nth (((n - 1) * q + 5000) / 10000) xs
+
+def levels : Unit ->{Diverge} Array i64 = \u. array.fromList (Cons(100, box Cons(500, box Cons(1000, box Cons(1500, box Cons(2000, box Cons(2500, box Cons(3000, box Cons(3500, box Cons(4000, box Cons(4500, box Cons(5000, box Cons(5500, box Cons(6000, box Cons(6500, box Cons(7000, box Cons(7500, box Cons(8000, box Cons(8500, box Cons(9000, box Cons(9500, box Cons(9900, box Nil))))))))))))))))))))))
+
+def baselineQs : i64 -> List i64 -> i64 -> Array i64 ->{Diverge, Panic} Array i64 =
+ \point errors i acc. if i == 21 then acc else baselineQs point errors (i + 1) (array.push acc (point + quantile (array.get (levels ()) i) errors - quantile 5000 errors))
+
+def pinball : i64 -> Array i64 -> i64 -> i64 ->{Diverge, Panic} i64 =
+ \actual qs i acc. if i == 21 then acc else let e = actual - array.get qs i in let q = array.get (levels ()) i in
+ pinball actual qs (i + 1) (acc + (if e < 0 then (10000 - q) * (0 - e) else q * e))
+
+def scaleSum : Series -> i64 -> i64 -> i64 -> i64 ->{Diverge, Panic} (i64, i64) =
+ \s ts left total n. if left == 0 then (total, n) else
+ case (sample s ts 0, sample s (ts - 604800) 0) of { (Some(a), Some(b)) -> scaleSum s (ts - 3600) (left - 1) (total + abs (a - b)) (n + 1) | _ -> scaleSum s (ts - 3600) (left - 1) total n }
+
+data Wire = Wire(Array u8, Array u8, Bool, Bool)
+
+def frame : List u8 ->{Diverge, Panic} Array u8 = \s. let bytes = array.fromList s in let n = array.length bytes in
+ require (n < 16777216);
+ array.fromList (append (Cons(((n lsr 24) land 255) as u8, box Cons(((n lsr 16) land 255) as u8, box Cons(((n lsr 8) land 255) as u8, box Cons((n land 255) as u8, box Nil))))) s)
+
+def received : Array u8 ->{Panic} Bool = \b. if array.length b < 4 then false else
+ let n = (array.get b 0 as i64) * 16777216 + (array.get b 1 as i64) * 65536 + (array.get b 2 as i64) * 256 + (array.get b 3 as i64) in
+ require (0 < n && n <= 16777216 && array.length b <= n + 4); array.length b == n + 4
+
+def wireStep : Wire -> loop.Event ->{Diverge, Panic} (Wire, List loop.Command) =
+ \w e. case w of { Wire(sent, got, done, failed) -> case e of {
+ Start -> (w, Cons(loop.Connect(1, loop.ipv4 127 0 0 1, 7419), box Cons(loop.After(120000, 1), box Nil)))
+ | Connected(tag, conn) -> (w, Cons(loop.Send(conn, sent), box Nil))
+ | Received(conn, bytes) -> let all = array.foldl (\a x. array.push a x) got bytes in
+ if received all then (Wire(sent, all, true, false), Cons(loop.Stop, box Nil)) else (Wire(sent, all, false, false), Nil)
+ | Failed(tag) -> (Wire(sent, got, false, true), Cons(loop.Stop, box Nil))
+ | Closed(conn) -> (Wire(sent, got, false, true), Cons(loop.Stop, box Nil))
+ | Timer(tag) -> (Wire(sent, got, false, true), Cons(loop.Stop, box Nil))
+ | _ -> (w, Nil) } }
+
+def stripFrame : Array u8 -> i64 -> List u8 ->{Diverge, Panic} List u8 =
+ \xs i acc. if i == array.length xs then reverse acc else stripFrame xs (i + 1) (Cons(array.get xs i, box acc))
+
+def infer : List u8 ->{Net, Diverge, Panic} List u8 = \request.
+ case loop.run (Wire(frame request, array.empty, false, false)) wireStep of { Wire(sent, got, done, failed) -> require (done && not failed); stripFrame got 4 Nil }
+
+def featureRows : Series -> i64 -> i64 -> i64 -> i64 -> List u8 ->{Diverge, Panic} List u8 =
+ \s ts n col total acc. if col == total then acc else
+ featureRows s ts n (col + 1) total (append acc (append (valuesText s ts n col "KNOWN") "\n"))
+
+def requestText : Series -> Series -> i64 -> i64 -> i64 -> i64 -> Bool -> List u8 ->{Diverge, Panic} List u8 =
+ \s cov end context horizon features clip sha.
+ let header = string.join "\t" (Cons("ENERGY1", box Cons(string.fromInt end, box Cons(string.fromInt horizon, box Cons(string.fromInt context, box Cons("1", box Cons((if clip then "1" else "0"), box Cons("0", box Cons(sha, box Nil))))))))) in
+ append header (append "\n" (append (valuesText s (end - context * 3600) context 0 "TARGET")
+ (append "\n" (append (featureRows cov (end - context * 3600) (context + horizon) 1 (features + 1) "") "END\n"))))
+
+def integersFrom : Array (List u8) -> i64 -> Array i64 ->{Diverge, Panic} Array i64 =
+ \cs i acc. if i == array.length cs then acc else integersFrom cs (i + 1) (array.push acc (number (array.get cs i)))
+
+def parseQ : List (List u8) -> Array (Array i64) ->{Diverge, Panic} Array (Array i64) =
+ \ls acc. case ls of { Nil -> acc | Cons(line, rest) -> let c = cells line in
+ if string.equal (array.get c 0) "Q" then (
+ require (array.length c == 24 && number (array.get c 1) == 0 && number (array.get c 2) == array.length acc);
+ parseQ (unbox rest) (array.push acc (integersFrom c 3 array.empty)))
+ else parseQ (unbox rest) acc }
+
+def qsText : Array i64 -> i64 -> List u8 ->{Diverge, Panic} List u8 = \qs i acc.
+ if i == array.length qs then acc else qsText qs (i + 1) (append acc (append "\t" (string.fromInt (array.get qs i))))
+
+def emit : List u8 -> List (List u8) ->{Files, Diverge, Panic} Unit = \path fields.
+ require (file.appendTo path (append (string.join "\t" fields) "\n"))
+
+def detail : List u8 -> i64 -> i64 -> List u8 -> Option i64 -> Array i64 ->{Files, Diverge, Panic} Unit =
+ \path origin target name actual qs.
+ let prefix = string.join "\t" (Cons("P", box Cons(string.fromInt origin, box Cons(string.fromInt target, box Cons(name, box Cons(textValue actual, box Nil)))))) in
+ require (file.appendTo path (append (qsText qs 0 prefix) "\n"))
+
+data Acc = Acc(i64, i64, i64, i64, i64, i64, i64, i64)
+
+def accumulate : Option i64 -> Array i64 -> Acc ->{Diverge, Panic} Acc =
+ \actual qs acc. case acc of { Acc(n, missing, ae, pb, c80, c90, w80, w90) -> case actual of {
+ None -> Acc(n, missing + 1, ae, pb, c80, c90, w80, w90)
+ | Some(y) -> Acc(n + 1, missing, ae + abs (y - array.get qs 10), pb + pinball y qs 0 0,
+ c80 + (if array.get qs 2 <= y && y <= array.get qs 18 then 1 else 0),
+ c90 + (if array.get qs 1 <= y && y <= array.get qs 19 then 1 else 0),
+ w80 + array.get qs 18 - array.get qs 2, w90 + array.get qs 19 - array.get qs 1) } }
+
+def summary : List u8 -> i64 -> List u8 -> Acc -> (i64, i64) ->{Files, Diverge, Panic} Unit =
+ \path origin name acc scale. case acc of { Acc(n, missing, ae, pb, c80, c90, w80, w90) -> let (s, sn) = scale in
+ emit path (Cons("M", box Cons(name, box (map string.fromInt (Cons(origin, box Cons(n, box Cons(missing, box Cons(ae, box Cons(pb, box Cons(c80, box Cons(c90, box Cons(w80, box Cons(w90, box Cons(s, box Cons(sn, box Nil)))))))))))))))) }
+
+def sortedQs : Array i64 -> i64 ->{Diverge, Panic} Unit = \qs i.
+ if i == 21 then () else (require (array.get qs (i - 1) <= array.get qs i); sortedQs qs (i + 1))
+
+def decode : List u8 -> i64 -> i64 ->{Diverge, Panic} Array (Array i64) = \body end horizon.
+ let ls = array.fromList (string.lines body) in let header = cells (array.get ls 0) in
+ require (string.equal (array.get header 0) "ENERGY1" && string.equal (array.get header 1) (string.fromInt end) && string.equal (array.get header 2) "OK");
+ let lev = integersFrom (cells (array.get ls 1)) 1 array.empty in
+ require (array.length lev == 21);
+ let checked = array.foldl (\i q. require (array.get (levels ()) i == q); i + 1) 0 lev in
+ let qs = parseQ (string.lines body) array.empty in require (array.length qs == horizon); qs
+
+def scoreRows : Series -> List u8 -> i64 -> i64 -> List u8 -> Array (Array i64) -> i64 -> Acc ->{Files, Diverge, Panic} Acc =
+ \s path origin start name rows i acc. if i == array.length rows then acc else
+ let qs = array.get rows i in let ts = start + i * 3600 in let y = sample s ts 0 in
+ sortedQs qs 1; detail path origin ts name y qs;
+ scoreRows s path origin start name rows (i + 1) (accumulate y qs acc)
+
+def seasonal : Series -> i64 -> i64 -> i64 -> i64 ->{Diverge, Panic} Option i64 =
+ \s ts left total n. if left == 0 then (if n == 0 then None else Some(total / n)) else
+ case sample s ts 0 of { None -> seasonal s (ts - 604800) (left - 1) total n | Some(x) -> seasonal s (ts - 604800) (left - 1) (total + x) (n + 1) }
+
+def baselinePoint : Series -> i64 -> i64 -> i64 ->{Diverge, Panic} Option i64 =
+ \s end ts lag. let effective = ((ts - end) / (lag * 3600) + 1) * lag in
+ if lag == 0 then None else if lag == 1 then seasonal s (ts - (((ts - end) / 604800 + 1) * 604800)) 8 0 0 else sample s (ts - effective * 3600) 0
+
+def calibration : Series -> i64 -> i64 -> i64 -> i64 -> List i64 ->{Diverge, Panic} List i64 =
+ \s ts left lag lead acc. if left == 0 then acc else
+ let next = case (sample s ts 0, baselinePoint s (ts - lead * 3600) ts lag) of { (Some(y), Some(p)) -> insert (y - p) acc | _ -> acc } in
+ calibration s (ts - 86400) (left - 1) lag lead next
+
+def baselineRows : Series -> List u8 -> i64 -> i64 -> i64 -> i64 -> i64 -> List u8 -> Acc ->{Files, Diverge, Panic} Acc =
+ \s path origin end start horizon i name acc. if i == horizon then acc else
+ let ts = start + i * 3600 in let lag = if string.equal name "yesterday" then 24 else if string.equal name "last_week" then 168 else 1 in
+ case baselinePoint s end ts lag of {
+ None -> emit path (Cons("U", box Cons(name, box Cons(string.fromInt origin, box Cons(string.fromInt ts, box Nil))))); baselineRows s path origin end start horizon (i + 1) name (case acc of { Acc(n, m, a, p, c, d, w, v) -> Acc(n, m + 1, a, p, c, d, w, v) })
+ | Some(point) -> let effective = ((ts - end) / (lag * 3600) + 1) * lag in
+ let errors = calibration s (ts - (((ts - end) / 86400 + 1) * 86400)) 56 lag ((ts - end) / 3600) Nil in
+ let qs = baselineQs point errors 0 array.empty in let y = sample s ts 0 in
+ detail path origin ts name y qs;
+ baselineRows s path origin end start horizon (i + 1) name (accumulate y qs acc) }
+
+def sliceQs : Array (Array i64) -> i64 -> i64 -> Array (Array i64) ->{Diverge, Panic} Array (Array i64) =
+ \xs i end acc. if i == end then acc else sliceQs xs (i + 1) end (array.push acc (array.get xs i))
+
+def job : Series -> List u8 -> i64 -> Bool -> List u8 -> List u8 ->{Net, Files, Diverge, Panic} Unit =
+ \s path context clip sha line. let cs = cells line in require (array.length cs == 6);
+ let origin = number (array.get cs 0) in let end = number (array.get cs 1) in let start = number (array.get cs 2) in let h = number (array.get cs 3) in
+ let features = number (array.get cs 5) in let cov = if features == 0 then s else loadSeries (array.get cs 4) in
+ require (start >= end && context >= 32 && h > 0 && start % 3600 == 0 && end % 3600 == 0);
+ let gap = (start - end) / 3600 in let full = h + gap in
+ let response = infer (requestText s cov end context full features clip sha) in
+ require (file.appendTo path (append "W\t" (append (array.get (array.fromList (string.lines response)) 0) "\n")));
+ let raw = decode response end full in let rows = sliceQs raw gap full array.empty in
+ let zero = Acc(0, 0, 0, 0, 0, 0, 0, 0) in let scale = scaleSum s (end - 3600) context 0 0 in
+ let acc = scoreRows s path origin start "timestral" rows 0 zero in summary path origin "timestral" acc scale;
+ let a = baselineRows s path origin end start h 0 "yesterday" zero in summary path origin "yesterday" a scale;
+ let b = baselineRows s path origin end start h 0 "last_week" zero in summary path origin "last_week" b scale;
+ if clip then () else (let c = baselineRows s path origin end start h 0 "seasonal_mean" zero in summary path origin "seasonal_mean" c scale)
+
+def jobs : Series -> List u8 -> i64 -> Bool -> List u8 -> List (List u8) ->{Net, Files, Diverge, Panic} Unit =
+ \s path context clip sha ls. case ls of { Nil -> () | Cons(line, rest) -> job s path context clip sha line; jobs s path context clip sha (unbox rest) }
+
+def run : List u8 ->{Net, Files, Diverge, Panic} i64 = \input.
+ let config = array.fromList (string.lines input) in require (array.length config == 6);
+ let s = loadSeries (array.get config 0) in let path = array.get config 1 in let context = number (array.get config 2) in let clip = number (array.get config 3) == 1 in
+ case file.read (array.get config 4) of { None -> require false; 1 | Some(text) -> require (file.write path ""); jobs s path context clip (array.get config 5) (string.lines text); 0 }
+

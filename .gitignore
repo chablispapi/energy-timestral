@@ -1,0 +1,11 @@
+/target/
+/build/
+/data/
+/models/
+/output/
+/.venv/
+__pycache__/
+
+.DS_Store
+/tmp/
+*.xls

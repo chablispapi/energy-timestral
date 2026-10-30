@@ -1,0 +1,9 @@
+data = "data/synthetic-2026.tsv"
+output = "output/weather-smoke"
+from = "2026-06-04"
+to = "2026-06-05"
+features = "calendar-weather"
+target = "load"
+context = 672
+phase = "development"
+synthetic = true

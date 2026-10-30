@@ -1,0 +1,2 @@
+import pipeline
+main = pipeline.run (readAll ())

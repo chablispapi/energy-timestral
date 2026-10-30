@@ -1,0 +1,4 @@
+name = energy
+main = keel/main.kl
+target = native
+

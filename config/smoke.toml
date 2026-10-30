@@ -1,0 +1,10 @@
+data = "data/synthetic.tsv"
+output = "output/smoke"
+from = "2024-01-05"
+to = "2024-01-07"
+features = "history"
+target = "load"
+context = 672
+phase = "development"
+synthetic = true
+

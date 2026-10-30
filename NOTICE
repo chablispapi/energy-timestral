@@ -1,0 +1,6 @@
+This project includes an inference port and an unmodified reference copy of
+Mistral AI's Timestral, Apache License 2.0.
+Upstream: https://github.com/mistralai/timestral
+Commit: a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff
+The upstream license is retained at reference/upstream/LICENSE.
+Timestral model weights are distributed separately under a Modified MIT license.

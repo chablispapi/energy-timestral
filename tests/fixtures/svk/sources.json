@@ -1,0 +1,43 @@
+{
+  "purpose": "Independent public observations validating source clock and consumption categories; not forecast covariates",
+  "retrieved_at_utc": "2026-10-24T19:35:48.415015+00:00",
+  "documentation": "https://api.opendata.esett.com/openapi?format=json",
+  "sources": {
+    "jan-production.json": {
+      "endpoint": "https://api.opendata.esett.com/EXP16/Aggregate",
+      "parameters": {
+        "mba": "10Y1001A1001A45N",
+        "start": "2025-12-31T21:00:00.000Z",
+        "end": "2026-01-01T05:00:00.000Z",
+        "resolution": "hour"
+      }
+    },
+    "jan-consumption.json": {
+      "endpoint": "https://api.opendata.esett.com/EXP15/Aggregate",
+      "parameters": {
+        "mba": "10Y1001A1001A45N",
+        "start": "2025-12-31T21:00:00.000Z",
+        "end": "2026-01-01T05:00:00.000Z",
+        "resolution": "hour"
+      }
+    },
+    "jul-production.json": {
+      "endpoint": "https://api.opendata.esett.com/EXP16/Aggregate",
+      "parameters": {
+        "mba": "10Y1001A1001A45N",
+        "start": "2026-06-30T21:00:00.000Z",
+        "end": "2026-07-01T05:00:00.000Z",
+        "resolution": "hour"
+      }
+    },
+    "jul-consumption.json": {
+      "endpoint": "https://api.opendata.esett.com/EXP15/Aggregate",
+      "parameters": {
+        "mba": "10Y1001A1001A45N",
+        "start": "2026-06-30T21:00:00.000Z",
+        "end": "2026-07-01T05:00:00.000Z",
+        "resolution": "hour"
+      }
+    }
+  }
+}
